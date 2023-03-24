@@ -1,0 +1,197 @@
+esphome:
+  name: garage-ac
+  friendly_name: garage_ac
+  includes:
+    - aircon_climate.h
+
+uart:
+  id: uart_bus
+  tx_pin: 1
+  rx_pin: 3
+  baud_rate: 9600
+
+globals:
+  - id: compressor_frequency
+    type: Sensor*
+  - id: compressor_frequency_setting
+    type: Sensor*
+  - id: compressor_frequency_send
+    type: Sensor*
+  - id: outdoor_temperature
+    type: Sensor*
+  - id: outdoor_condenser_temperature
+    type: Sensor*
+  - id: compressor_exhaust_temperature
+    type: Sensor*
+  - id: target_exhaust_temperature
+    type: Sensor*
+  - id: indoor_pipe_temperature
+    type: Sensor*
+  - id: indoor_humidity_setting
+    type: Sensor*
+  - id: indoor_humidity_status
+    type: Sensor*
+
+climate:
+- platform: custom
+  id: my_climate
+  lambda: |-
+    auto aircon_climate = new AirconClimate(id(uart_bus));
+    App.register_component(aircon_climate);
+    id(compressor_frequency) = &aircon_climate->compressor_frequency;
+    id(compressor_frequency_setting) = &aircon_climate->compressor_frequency_setting;
+    id(compressor_frequency_send) = &aircon_climate->compressor_frequency_send;
+    id(outdoor_temperature) = &aircon_climate->outdoor_temperature;
+    id(outdoor_condenser_temperature) = &aircon_climate->outdoor_condenser_temperature;
+    id(compressor_exhaust_temperature) = &aircon_climate->compressor_exhaust_temperature;
+    id(target_exhaust_temperature) = &aircon_climate->target_exhaust_temperature;
+    id(indoor_pipe_temperature) = &aircon_climate->indoor_pipe_temperature;
+    id(indoor_humidity_setting) = &aircon_climate->indoor_humidity_setting;
+    id(indoor_humidity_status) = &aircon_climate->indoor_humidity_status;
+    return {aircon_climate};
+  climates:
+    - name: "Aircon Climate"
+
+sensor:
+- platform: custom
+  lambda: |-
+    return {
+      id(compressor_frequency),
+      id(compressor_frequency_setting),
+      id(compressor_frequency_send),
+      id(outdoor_temperature),
+      id(outdoor_condenser_temperature),
+      id(compressor_exhaust_temperature),
+      id(target_exhaust_temperature),
+      id(indoor_pipe_temperature),
+      id(indoor_humidity_setting),
+      id(indoor_humidity_status)
+    };
+  sensors:
+  - name: "Compressor Frequency"
+    unit_of_measurement: "Hz"
+    device_class: "frequency"
+    state_class: "measurement"
+    filters:
+      - quantile:
+          window_size: 7
+          send_every: 4
+          send_first_at: 3
+          quantile: .9
+  - name: "Compressor Frequency Setting"
+    unit_of_measurement: "Hz"
+    device_class: "frequency"
+    state_class: "measurement"
+    filters:
+      - quantile:
+          window_size: 7
+          send_every: 4
+          send_first_at: 3
+          quantile: .9
+  - name: "Compressor Frequency Send"
+    unit_of_measurement: "Hz"
+    device_class: "frequency"
+    state_class: "measurement"
+  - name: "Outdoor Temperature"
+    unit_of_measurement: "°C"
+    icon: "mdi:thermometer"
+    device_class: "temperature"
+    state_class: "measurement"
+    filters:
+      - quantile:
+          window_size: 7
+          send_every: 4
+          send_first_at: 3
+          quantile: .9
+  - name: "Outdoor Condenser Temperature"
+    unit_of_measurement: "°C"
+    icon: "mdi:thermometer"
+    device_class: "temperature"
+    state_class: "measurement"
+    filters:
+      - quantile:
+          window_size: 7
+          send_every: 4
+          send_first_at: 3
+          quantile: .9
+  - name: "Compressor Exhaust Temperature"
+    unit_of_measurement: "°C"
+    icon: "mdi:thermometer"
+    device_class: "temperature"
+    state_class: "measurement"
+    filters:
+      - quantile:
+          window_size: 7
+          send_every: 4
+          send_first_at: 3
+          quantile: .9
+  - name: "Target Exhaust Temperature"
+    unit_of_measurement: "°C"
+    icon: "mdi:thermometer"
+    device_class: "temperature"
+    state_class: "measurement"
+    filters:
+      - quantile:
+          window_size: 7
+          send_every: 4
+          send_first_at: 3
+          quantile: .9
+  - name: "Indoor Evaporator Inlet Temperature"
+    unit_of_measurement: "°C"
+    icon: "mdi:thermometer"
+    device_class: "temperature"
+    state_class: "measurement"
+    filters:
+      - quantile:
+          window_size: 7
+          send_every: 4
+          send_first_at: 3
+          quantile: .9
+  - name: "Indoor Humidity setting"
+    unit_of_measurement: "%"
+    icon: "mdi:water-percent"
+    device_class: "humidity"
+    state_class: "measurement"
+    filters:
+      - quantile:
+          window_size: 7
+          send_every: 4
+          send_first_at: 3
+          quantile: .9
+  - name: "Indoor Humidity status"
+    unit_of_measurement: "%"
+    icon: "mdi:water-percent"
+    device_class: "humidity"
+    state_class: "measurement"
+    filters:
+      - quantile:
+          window_size: 7
+          send_every: 4
+          send_first_at: 3
+          quantile: .9
+
+esp8266:
+  board: esp01_1m
+
+# Enable logging
+logger:
+  baud_rate: 0
+  
+# Enable Home Assistant API
+api:
+  encryption:
+    key: "1582jQcjZD+C7vt193Cq8MAnVHaQTZKp/PlPveW22Z0="
+
+ota:
+  password: "4b75164a7040a860a6cb59266d9dcd9e"
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Garage-Ac Fallback Hotspot"
+    password: "pLWgQiIbKX2w"
+
+captive_portal:
