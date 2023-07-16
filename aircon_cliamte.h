@@ -718,16 +718,16 @@ class AirconClimate : public PollingComponent, public Climate, public UARTDevice
 public:
     AirconClimate(UARTComponent *parent) : PollingComponent(2000),
                                            UARTDevice(parent),
-                                           compressor_frequency("Compressor Frequency"),
-                                           compressor_frequency_setting("Compressor Frequency Setting"),
-                                           compressor_frequency_send("Compressor Frequency Send"),
-                                           outdoor_temperature("Outdoor Temperature"),
-                                           outdoor_condenser_temperature("Outdoor Condenser Temperature"),
-                                           compressor_exhaust_temperature("Compressor Exhaust Temperature"),
-                                           target_exhaust_temperature("Target Exhaust Temperature"),
-                                           indoor_pipe_temperature("Indoor Evaporator Inlet Temperature"),
-                                           indoor_humidity_setting("Indoor Humidity setting"),
-                                           indoor_humidity_status("Indoor Humidity status") {}
+                                           compressor_frequency(),
+                                           compressor_frequency_setting(),
+                                           compressor_frequency_send(),
+                                           outdoor_temperature(),
+                                           outdoor_condenser_temperature(),
+                                           compressor_exhaust_temperature(),
+                                           target_exhaust_temperature(),
+                                           indoor_pipe_temperature(),
+                                           indoor_humidity_setting(),
+                                           indoor_humidity_status() {}
 
     void setup() override
     {
