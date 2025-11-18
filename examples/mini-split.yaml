@@ -1,0 +1,68 @@
+esphome:
+  name: mini-split
+  friendly_name: Mini Split AC
+
+external_components:
+  - source: github://pslawinski/esphome_airconintl
+
+uart:
+  tx_pin: 1
+  rx_pin: 3
+  baud_rate: 9600
+  # debug:
+
+climate:
+  - platform: airconintl
+    name: "Mini Split AC"
+    temperature_unit: "F"
+    re_pin: GPIO12
+    de_pin: GPIO13
+    compressor_frequency:
+      name: "Compressor Frequency"
+    compressor_frequency_setting:
+      name: "Compressor Frequency Setting"
+    compressor_frequency_send:
+      name: "Compressor Frequency Send"
+    outdoor_temperature:
+      name: "Outdoor Temperature"
+    outdoor_condenser_temperature:
+      name: "Outdoor Condenser Temperature"
+    compressor_exhaust_temperature:
+      name: "Compressor Exhaust Temperature"
+    target_exhaust_temperature:
+      name: "Target Exhaust Temperature"
+    indoor_pipe_temperature:
+      name: "Indoor Evaporator Inlet Temperature"
+    humidity_setpoint:
+      name: "Indoor Humidity setting"
+    humidity_status:
+      name: "Indoor Humidity status"
+
+switch:
+  - platform: restart
+    name: "AC controller restart"
+
+esp8266:
+  board: esp01_1m
+
+# Enable logging
+logger:
+  level: VERBOSE
+  baud_rate: 0
+  
+# Enable Home Assistant API
+api:
+
+ota:
+  - platform: esphome
+
+wifi:
+  ssid: !secret wifi_ssid
+  password: !secret wifi_password
+
+  # Enable fallback hotspot (captive portal) in case wifi connection fails
+  ap:
+    ssid: "Mini-Split Fallback Hotspot"
+    password: !secret fallback_password
+
+captive_portal:
