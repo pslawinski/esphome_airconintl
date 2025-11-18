@@ -636,11 +636,12 @@ namespace esphome
                     }
                     return 0;
                 } else {
-                    // Handle byte stuffing: skip the first F4 in the middle of the message
+                    // Handle byte stuffing: skip the stuffed F4 but include in checksum
                     if (input == 0xF4 && msg_buffer.size() > 15 && msg_buffer.size() < expected_msg_size - 2 && !first_f4_skipped) {
-                        if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Skipping stuffed F4 at position %zu", msg_buffer.size());
+                        if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Skipping stuffed F4 at position %zu, adding to checksum", msg_buffer.size());
+                        checksum += input;  // Include in checksum
                         first_f4_skipped = true;
-                        return 0; // Skip this byte
+                        return 0; // Skip adding to buffer
                     }
 
                     msg_buffer.push_back(input);
