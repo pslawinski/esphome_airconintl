@@ -613,7 +613,6 @@ namespace esphome
                 static uint16_t checksum = 0;
                 static bool in_message = false;
                 static int expected_msg_size = 0;
-                static bool first_f4_skipped = false; // Track if the first F4 in the middle has been skipped
 
                 if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "get_response: input=0x%02X, in_message=%d, buffer_size=%zu", input, in_message, msg_buffer.size());
 
@@ -625,7 +624,6 @@ namespace esphome
                         checksum = 0;
                         expected_msg_size = 0;
                         in_message = true;
-                        first_f4_skipped = false; // Reset for new message
                         // Response is starting, stop waiting for ACK
                         if (send_state == WAITING_ACK) {
                             send_state = IDLE;
@@ -636,11 +634,9 @@ namespace esphome
                     }
                     return 0;
                 } else {
-                    // Handle byte stuffing: skip the stuffed F4 but include in checksum
-                    if (input == 0xF4 && msg_buffer.size() > 15 && msg_buffer.size() < expected_msg_size - 2 && !first_f4_skipped) {
-                        if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Skipping stuffed F4 at position %zu, adding to checksum", msg_buffer.size());
-                        checksum += input;  // Include in checksum
-                        first_f4_skipped = true;
+                    // Handle byte stuffing: skip the stuffed F4
+                    if (input == 0xF4 && !msg_buffer.empty() && msg_buffer.back() == 0xF4) {
+                        if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Skipping stuffed F4");
                         return 0; // Skip adding to buffer
                     }
 
@@ -656,7 +652,6 @@ namespace esphome
                             ESP_LOGE("aircon_climate", "Header mismatch at byte %zu: expected %02X, got %02X", idx, expected[idx], msg_buffer[idx]);
                             in_message = false;
                             msg_buffer.clear();
-                            first_f4_skipped = false;
                             return 0;
                         } else {
                             if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Header byte %zu matches: 0x%02X", idx, msg_buffer[idx]);
@@ -668,7 +663,6 @@ namespace esphome
                                 ESP_LOGE("aircon_climate", "Message size too large: %d", expected_msg_size);
                                 in_message = false;
                                 msg_buffer.clear();
-                                first_f4_skipped = false;
                                 return 0;
                             }
                         }
@@ -680,7 +674,6 @@ namespace esphome
                                 ESP_LOGE("aircon_climate", "CRC check failed. Computed: %d Received: %d", checksum, rxd_checksum);
                                 in_message = false;
                                 msg_buffer.clear();
-                                first_f4_skipped = false;
                                 return 0;
                             }
                         } else if (idx == expected_msg_size - 2) {
@@ -689,7 +682,6 @@ namespace esphome
                                 ESP_LOGE("aircon_climate", "Frame end F4 mismatch");
                                 in_message = false;
                                 msg_buffer.clear();
-                                first_f4_skipped = false;
                                 return 0;
                             }
                         } else if (idx == expected_msg_size - 1) {
@@ -698,7 +690,6 @@ namespace esphome
                                 ESP_LOGE("aircon_climate", "Frame end FB mismatch");
                                 in_message = false;
                                 msg_buffer.clear();
-                                first_f4_skipped = false;
                                 return 0;
                             } else {
                                 size_t msg_size = msg_buffer.size();
@@ -706,7 +697,6 @@ namespace esphome
                                 memcpy(out, msg_buffer.data(), msg_size);
                                 in_message = false;
                                 msg_buffer.clear();
-                                first_f4_skipped = false;
                                 return msg_size;
                             }
                         }
