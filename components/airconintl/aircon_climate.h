@@ -91,7 +91,6 @@ namespace esphome
                     de_pin->digital_write(false); // Disable transmit (idle)
                 }
                 // idle_until = millis() + 10000; // Idle 10 seconds at startup
-                ESP_LOGD("aircon_climate", "Free heap: %d", ESP.getFreeHeap());
                 request_update();
             }
 
@@ -608,7 +607,6 @@ namespace esphome
             static const int UART_BUF_SIZE = 128;
             uint8_t uart_buf[UART_BUF_SIZE];
 
-            // Handle bytes from the UART to build a complete message
             int get_response(const uint8_t input, uint8_t *out)
             {
                 static std::vector<uint8_t> msg_buffer;
@@ -702,12 +700,13 @@ namespace esphome
                                 first_f4_skipped = false;
                                 return 0;
                             } else {
+                                size_t msg_size = msg_buffer.size();
                                 ESP_LOGD("aircon_climate", "Received %zu bytes.", msg_buffer.size());
-                                memcpy(out, msg_buffer.data(), msg_buffer.size());
+                                memcpy(out, msg_buffer.data(), msg_size);
                                 in_message = false;
                                 msg_buffer.clear();
                                 first_f4_skipped = false;
-                                return msg_buffer.size();
+                                return msg_size;
                             }
                         }
                     }
