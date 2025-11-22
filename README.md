@@ -5,7 +5,7 @@ This ESPHome component provides full control and monitoring of Aircon Internatio
 
 ## About the Hisense AEH-W4A1 Controller
 
-This component directly replaces the Hisense AEH-W4A1 (also labeled EH-W4A1) WiFi controller dongle. The AEH-W4A1 is the official smart controller for many Hisense, Aircon International, and rebranded mini-split AC units (including brands like Midea, Toshiba, etc.).
+This component directly replaces the Hisense AEH-W4A1 (also labeled EH-W4A1) WiFi controller dongle. The AEH-W4A1 is the official smart controller for Hisense and Aircon International mini-split AC units.
 
 The dongle plugs into a dedicated 4-pin port on the indoor unit's control board with the following pinout:
 1. GND (black wire)
