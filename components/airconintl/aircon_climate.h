@@ -534,7 +534,8 @@ namespace esphome
             {
                 // The capabilities of the climate device
                 auto traits = climate::ClimateTraits();
-                traits.set_supports_current_temperature(true);
+                // traits.set_supports_current_temperature(true);
+                traits.add_feature_flags(climate::CLIMATE_SUPPORTS_CURRENT_TEMPERATURE);
                 traits.set_visual_min_temperature(16);
                 traits.set_visual_max_temperature(32);
                 traits.set_visual_temperature_step(1);
@@ -559,7 +560,8 @@ namespace esphome
                 traits.set_supported_presets({climate::CLIMATE_PRESET_NONE,
                                               climate::CLIMATE_PRESET_BOOST,
                                               climate::CLIMATE_PRESET_ECO});
-                traits.set_supports_action(true);
+                // traits.set_supports_action(true);
+                traits.add_feature_flags(climate::CLIMATE_SUPPORTS_ACTION);
                 return traits;
             }
 
@@ -642,8 +644,7 @@ namespace esphome
 
                     msg_buffer.push_back(input);
                     size_t idx = msg_buffer.size() - 1;
-                    const uint8_t expected[16] = {0xF4,0xF5,0x01,0x40,0x49,0x01,0x00,0xFE,0x01,0x01,0x01,0x01,0x00,0x66,0x00,0x01};
-                    if (idx >= 2 && idx < expected_msg_size - 4) {
+const uint8_t expected[16] = {0xF4,0xF5,0x01,0x40,0x97,0x01,0x00,0xFE,0x01,0x01,0x01,0x01,0x00,0x66,0x00,0x01};                    if (idx >= 2 && idx < expected_msg_size - 4) {
                         checksum += msg_buffer[idx];
                         if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Checksum add: 0x%02X, current checksum: %d", msg_buffer[idx], checksum);
                     }
