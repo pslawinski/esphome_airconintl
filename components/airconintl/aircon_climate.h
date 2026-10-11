@@ -639,118 +639,84 @@ namespace esphome
 
             int get_response(const uint8_t input, uint8_t *out)
             {
-                static std::vector<uint8_t> msg_buffer;
-                static uint16_t checksum = 0;
-                static bool in_message = false;
-                static int expected_msg_size = 0;
+                static std::vector<uint8_t> buf;
+                static bool in_frame = false;
+                static bool esc = false;   // previous byte was an F4 not yet classified
+            
+                static const uint8_t HDR[16] = {0xF4,0xF5,0x01,0x40,0x00,0x01,0x00,0xFE,
+                                                0x01,0x01,0x01,0x01,0x00,0x00,0x00,0x01};
+                static const size_t SHORT_ACK_SIZE = 20;
+            
+                auto drop = [&](const char *why) {
+                    ESP_LOGE("aircon_climate", "%s; dropped frame: %s", why, format_hex_pretty(buf).c_str());
+                    in_frame = false;
+                    buf.clear();
+                };
 
-                if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "get_response: input=0x%02X, in_message=%d, buffer_size=%zu", input, in_message, msg_buffer.size());
-
-                if (!in_message) {
-                    if (input == 0xF4) {
-                        if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Starting new message with F4");
-                        msg_buffer.clear();
-                        msg_buffer.push_back(input);
-                        checksum = 0;
-                        expected_msg_size = 0;
-                        in_message = true;
-                        // Response is starting, stop waiting for ACK
-                        if (send_state == WAITING_ACK) {
-                            send_state = IDLE;
-                            if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Setting send_state to IDLE as response started");
+                static uint32_t last_byte_ms = 0;
+                const uint32_t now = millis();
+                if ((in_frame || esc) && (now - last_byte_ms) > 250) {
+                    ESP_LOGW("aircon_climate", "RX stalled mid-frame, discarding %zu partial bytes", buf.size());
+                    in_frame = false; esc = false; buf.clear();
+                }
+                last_byte_ms = now;
+                
+                if (esc) {
+                    esc = false;
+                    if (input == 0xF5) {                         // SOF: always (re)start here
+                        if (in_frame)
+                            ESP_LOGW("aircon_climate", "SOF mid-frame, discarding %zu partial bytes", buf.size());
+                        buf.assign({0xF4, 0xF5});
+                        in_frame = true;
+                        if (send_state == WAITING_ACK) send_state = IDLE;
+                        return 0;
+                    }
+                    if (input == 0xF4) {                         // stuffed literal F4
+                        if (in_frame) buf.push_back(0xF4);
+                        return 0;
+                    }
+                    if (input == 0xFB) {                         // EOF
+                        if (!in_frame) return 0;
+                        buf.push_back(0xF4);
+                        buf.push_back(0xFB);
+                        const size_t n = buf.size();
+            
+                        if (n < SHORT_ACK_SIZE) { drop("Runt frame"); return 0; }
+                        for (size_t i = 0; i < 16; i++) {
+                            bool ok = (i == 4)  ? (buf[i] == 0x49 || buf[i] == 0x97 || buf[i] == 0x0B)
+                                    : (i == 13) ? (buf[i] == 0x65 || buf[i] == 0x66)
+                                                : (buf[i] == HDR[i]);
+                            if (!ok) { drop("Header mismatch"); return 0; }
                         }
-                    } else {
-                        if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Ignoring byte 0x%02X, waiting for F4", input);
-                    }
-                    return 0;
-                } else {
-                    // Handle byte stuffing: skip the stuffed F4
-                    if (input == 0xF4 && !msg_buffer.empty() && msg_buffer.back() == 0xF4) {
-                        if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Skipping stuffed F4");
-                        return 0; // Skip adding to buffer
-                    }
-
-                    msg_buffer.push_back(input);
-                    size_t idx = msg_buffer.size() - 1;
-                    // Byte 4 identifies the message type/variant:
-                    //   0x49 or 0x97 -> full Device_Status response (device/firmware variant)
-                    //   0x0B         -> short ACK response to a control command (20 bytes total)
-                    // Byte 13 similarly differs: 0x66 on Device_Status responses, 0x65 on the
-                    // short ACK (matches the 0x65 already used in outgoing control commands).
-                    const uint8_t expected[16] = {0xF4,0xF5,0x01,0x40,0x00,0x01,0x00,0xFE,0x01,0x01,0x01,0x01,0x00,0x00,0x00,0x01};
-                    static const size_t SHORT_ACK_SIZE = 20;
-                    if (idx >= 2 && idx < expected_msg_size - 4) {
-                        checksum += msg_buffer[idx];
-                        if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Checksum add: 0x%02X, current checksum: %d", msg_buffer[idx], checksum);
-                    }
-                    if (idx < 16) {
-                        bool byte_ok;
-                        if (idx == 4) {
-                            byte_ok = (msg_buffer[idx] == 0x49 || msg_buffer[idx] == 0x97 || msg_buffer[idx] == 0x0B);
-                        } else if (idx == 13) {
-                            byte_ok = (msg_buffer[idx] == 0x65 || msg_buffer[idx] == 0x66);
-                        } else {
-                            byte_ok = (msg_buffer[idx] == expected[idx]);
-                        }
-                        if (!byte_ok) {
-                            ESP_LOGE("aircon_climate", "Header mismatch at byte %zu: got %02X", idx, msg_buffer[idx]);
-                            in_message = false;
-                            msg_buffer.clear();
+                        const size_t want = (buf[4] == 0x0B) ? SHORT_ACK_SIZE : sizeof(Device_Status);
+                        if (n != want) { drop("Length mismatch"); return 0; }
+            
+                        uint16_t sum = 0;
+                        for (size_t i = 2; i < n - 4; i++) sum += buf[i];
+                        const uint16_t rx = (buf[n - 4] << 8) | buf[n - 3];
+                        if (sum != rx) {
+                            ESP_LOGE("aircon_climate", "CRC check failed. Computed: %d Received: %d", sum, rx);
+                            drop("CRC");
                             return 0;
-                        } else {
-                            if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Header byte %zu matches: 0x%02X", idx, msg_buffer[idx]);
                         }
-                        if (idx == 4) {
-                            expected_msg_size = (msg_buffer[idx] == 0x0B) ? SHORT_ACK_SIZE : sizeof(Device_Status);
-                            if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Expected message size: %d", expected_msg_size);
-                            if (expected_msg_size > UART_BUF_SIZE) {
-                                ESP_LOGE("aircon_climate", "Message size too large: %d", expected_msg_size);
-                                in_message = false;
-                                msg_buffer.clear();
-                                return 0;
-                            }
-                        }
-                    } else {
-                        // Common tail logic for both message types (Device_Status and short ACK):
-                        // checksum verification then F4/FB footer, sized against expected_msg_size.
-                        if (idx == expected_msg_size - 3) {
-                            uint16_t rxd_checksum = (msg_buffer[expected_msg_size - 4] << 8) | msg_buffer[expected_msg_size - 3];
-                            if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "CRC check: computed %d, received %d", checksum, rxd_checksum);
-                            if (checksum != rxd_checksum) {
-                                ESP_LOGE("aircon_climate", "CRC check failed. Computed: %d Received: %d", checksum, rxd_checksum);
-                                in_message = false;
-                                msg_buffer.clear();
-                                return 0;
-                            }
-                        } else if (idx == expected_msg_size - 2) {
-                            if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Checking frame end F4: 0x%02X", msg_buffer[idx]);
-                            if (msg_buffer[idx] != 0xF4) {
-                                ESP_LOGE("aircon_climate", "Frame end F4 mismatch");
-                                in_message = false;
-                                msg_buffer.clear();
-                                return 0;
-                            }
-                        } else if (idx == expected_msg_size - 1) {
-                            if (DEBUG_LOGGING) ESP_LOGD("aircon_climate", "Checking frame end FB: 0x%02X", msg_buffer[idx]);
-                            if (msg_buffer[idx] != 0xFB) {
-                                ESP_LOGE("aircon_climate", "Frame end FB mismatch");
-                                in_message = false;
-                                msg_buffer.clear();
-                                return 0;
-                            } else {
-                                size_t msg_size = msg_buffer.size();
-                                ESP_LOGD("aircon_climate", "Received %zu bytes.", msg_buffer.size());
-                                memcpy(out, msg_buffer.data(), msg_size);
-                                in_message = false;
-                                msg_buffer.clear();
-                                return msg_size;
-                            }
-                        }
+                        memcpy(out, buf.data(), n);
+                        in_frame = false;
+                        buf.clear();
+                        return n;
                     }
+                    // Lone F4 followed by ordinary data: keep the old lenient behaviour (treat as data)
+                    if (in_frame) buf.push_back(0xF4);
+                } else if (input == 0xF4) {
+                    esc = true;
                     return 0;
                 }
+            
+                if (in_frame) {
+                    if (buf.size() >= UART_BUF_SIZE - 2) { drop("RX frame overflow"); return 0; }
+                    buf.push_back(input);
+                }
+                return 0;
             }
-
             // Non-blocking message sending with queue and timeout
             void send_message(const std::string& desc, const std::vector<uint8_t>& msg)
             {
